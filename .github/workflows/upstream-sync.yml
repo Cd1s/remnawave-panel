@@ -1,0 +1,52 @@
+name: Sync upstream
+
+on:
+    schedule:
+        - cron: '55 3 * * *'
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+concurrency:
+    group: upstream-sync-panel
+    cancel-in-progress: false
+
+jobs:
+    sync:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: singbox
+                  fetch-depth: 0
+
+            - name: Merge upstream
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git remote add upstream https://github.com/remnawave/panel.git
+                  git fetch upstream main
+                  if git merge-base --is-ancestor upstream/main HEAD; then
+                    echo "Already up to date."
+                    exit 0
+                  fi
+                  git merge --no-edit upstream/main
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '22.18.0'
+                  cache: npm
+
+            - run: npm ci --no-audit --no-fund
+            - run: npm run typecheck
+            - run: npm run build
+
+            - name: Verify fork documentation
+              run: |
+                  test -f AGENTS.md
+                  test -f docs/fork/overview.mdx
+                  test -f docs/fork/upstream-maintenance.mdx
+
+            - name: Push tested merge
+              run: git push origin HEAD:singbox

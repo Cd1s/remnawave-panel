@@ -1,0 +1,34 @@
+---
+title: Updates and maintenance
+description: How the fork follows official Remnawave releases without losing custom features.
+sidebar_position: 2
+---
+
+# Updates and maintenance
+
+Panel, Backend, Frontend, and Node are real forks of the matching official Remnawave repositories.
+Each maintained `singbox` branch has automated upstream synchronization.
+
+The automation:
+
+1. fetches the official `main` branch;
+2. merges it in an isolated GitHub Actions checkout;
+3. runs repository-specific validation;
+4. pushes only a tested merge;
+5. publishes Backend and Node images where applicable.
+
+If the merge conflicts or validation fails, the public `singbox` branch is not updated. The
+failure must be repaired on a temporary branch while preserving both the new official behavior and
+the fork compatibility invariants.
+
+Custom features are kept behind narrow adapters, optional fields, additive migrations, and focused
+regression tests so they can be carried onto later official versions.
+
+The detailed AI and maintainer runbook is in
+[`Cd1s/remnawave-singbox`](https://github.com/Cd1s/remnawave-singbox):
+
+- [project map](https://github.com/Cd1s/remnawave-singbox/blob/main/docs/project-map.md);
+- [custom feature registry](https://github.com/Cd1s/remnawave-singbox/blob/main/docs/custom-feature-registry.md);
+- [upstream repair guide](https://github.com/Cd1s/remnawave-singbox/blob/main/docs/upstream-maintenance.md);
+- [isolated validation](https://github.com/Cd1s/remnawave-singbox/blob/main/docs/isolated-validation.md);
+- [production migration and rollback](https://github.com/Cd1s/remnawave-singbox/blob/main/docs/production-migration.md).

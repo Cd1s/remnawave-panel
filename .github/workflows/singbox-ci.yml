@@ -1,0 +1,39 @@
+name: Sing-box panel CI
+
+on:
+    push:
+        branches:
+            - singbox
+    pull_request:
+        branches:
+            - singbox
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: singbox-panel-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    validate:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '22.18.0'
+                  cache: npm
+
+            - run: npm ci --no-audit --no-fund
+            - run: npm run typecheck
+            - run: npm run build
+
+            - name: Verify fork documentation
+              run: |
+                  test -f AGENTS.md
+                  test -f docs/fork/overview.mdx
+                  test -f docs/fork/upstream-maintenance.mdx
+                  ! grep -RInE '[[:blank:]]+$' AGENTS.md docs/fork README.md

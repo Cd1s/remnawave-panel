@@ -5,13 +5,13 @@ import { themes as prismThemes } from 'prism-react-renderer'
 import { ScalarOptions } from '@scalar/docusaurus'
 
 const config: Config = {
-    title: 'Remnawave Documentation',
-    tagline: 'Remnawave Documentation',
+    title: 'Remnawave Xray + sing-box',
+    tagline: 'Unofficial Remnawave fork documentation and releases',
     favicon: 'img/favicon.ico',
-    url: 'https://docs.rw',
-    baseUrl: '/',
-    organizationName: 'remnawave',
-    projectName: 'panel',
+    url: 'https://cd1s.github.io',
+    baseUrl: '/remnawave-panel/',
+    organizationName: 'Cd1s',
+    projectName: 'remnawave-panel',
     onBrokenLinks: 'throw',
     onBrokenMarkdownLinks: 'warn',
 
@@ -31,31 +31,6 @@ const config: Config = {
                 name: 'theme-color',
                 content: '#242c38'
             }
-        },
-        {
-            tagName: 'link',
-            attributes: {
-                key: 'docusaurus-plugin-plausible-preconnect',
-                rel: 'preconnect',
-                href: `https://ps.log.rw`
-            }
-        },
-        {
-            tagName: 'script',
-            attributes: {
-                async: 'true',
-                src: 'https://ps.log.rw/js/pa-fsigGX5NspgeKn5IItyE7.js'
-            }
-        },
-        {
-            tagName: 'script',
-            attributes: {
-                key: 'docusaurus-plugin-plausible-custom-events'
-            },
-            innerHTML: `
-  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-  plausible.init()
-            `
         }
     ],
 
@@ -68,7 +43,7 @@ const config: Config = {
                     showLastUpdateAuthor: false,
                     showLastUpdateTime: false,
                     sidebarPath: './sidebars.ts',
-                    editUrl: 'https://github.com/remnawave/panel/tree/main'
+                    editUrl: 'https://github.com/Cd1s/remnawave-panel/tree/singbox'
                 },
                 // blog: {
                 //     showReadingTime: true,
@@ -156,11 +131,11 @@ const config: Config = {
             }
         },
         navbar: {
-            title: 'Remnawave',
+            title: 'Remnawave Fork',
             logo: {
                 alt: 'Remnawave Logo',
                 src: 'img/logo.svg',
-                href: 'https://docs.rw'
+                href: '/remnawave-panel/'
             },
             items: [
                 {
@@ -171,17 +146,17 @@ const config: Config = {
                 },
                 {
                     href: 'https://f.docs.rw',
-                    label: '💬 Forum',
+                    label: '💬 Official Forum',
                     position: 'left'
                 },
                 {
                     href: 'https://f.docs.rw/c/announces/14',
-                    label: '🚀 Changelog',
+                    label: '🚀 Official Changelog',
                     position: 'left'
                 },
                 {
-                    href: 'https://github.com/remnawave',
-                    label: 'GitHub',
+                    href: 'https://github.com/Cd1s/remnawave-panel',
+                    label: 'Fork GitHub',
                     position: 'left'
                 }
             ]
@@ -216,12 +191,12 @@ const config: Config = {
                     items: [
                         {
                             label: 'GitHub',
-                            href: 'https://github.com/remnawave'
+                            href: 'https://github.com/Cd1s/remnawave-panel'
                         }
                     ]
                 }
             ],
-            copyright: `Copyright © ${new Date().getFullYear()} Remnawave`
+            copyright: `Unofficial Remnawave fork © ${new Date().getFullYear()}`
         },
         colorMode: {
             defaultMode: 'dark',

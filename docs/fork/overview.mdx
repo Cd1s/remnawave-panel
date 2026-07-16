@@ -1,0 +1,45 @@
+---
+title: Xray + sing-box fork
+description: Repository map and compatibility overview for the Remnawave Xray + sing-box fork.
+sidebar_position: 1
+---
+
+# Remnawave Xray + sing-box fork
+
+This is an **unofficial fork** of Remnawave that keeps existing Xray behavior and adds optional
+sing-box profiles with AnyTLS support. It is not maintained or supported by the official
+Remnawave project.
+
+## Repositories
+
+| Component | Repository | Purpose |
+| --- | --- | --- |
+| Panel | [`Cd1s/remnawave-panel`](https://github.com/Cd1s/remnawave-panel) | Public project, documentation, and unified releases |
+| Backend | [`Cd1s/remnawave-backend`](https://github.com/Cd1s/remnawave-backend) | API, database, core profiles, subscriptions, and orchestration |
+| Frontend | [`Cd1s/remnawave-frontend`](https://github.com/Cd1s/remnawave-frontend) | Core-aware profile and Node interface |
+| Node | [`Cd1s/remnawave-node`](https://github.com/Cd1s/remnawave-node) | Xray and sing-box runtime, users, health, and traffic |
+| Handbook | [`Cd1s/remnawave-singbox`](https://github.com/Cd1s/remnawave-singbox) | Architecture, validation, maintenance, migration, and rollback |
+
+The maintained branch is `singbox` in Panel, Backend, Frontend, and Node.
+
+## Images
+
+```text
+ghcr.io/cd1s/remnawave-backend:singbox
+ghcr.io/cd1s/remnawave-node:singbox
+```
+
+Use an immutable OCI digest for repeatable production deployment. Moving tags are intended for CI
+and discovery.
+
+## Compatibility boundary
+
+- Existing profiles continue to use Xray unless `coreType` is explicitly set to `singbox`.
+- Existing Xray Nodes and subscriptions remain supported.
+- sing-box and AnyTLS are opt-in.
+- AnyTLS is emitted for compatible sing-box JSON and URI clients, not as an Xray JSON outbound.
+- A feature is considered releasable only after repository validation and isolated runtime tests.
+
+See the
+[engineering handbook](https://github.com/Cd1s/remnawave-singbox/blob/main/docs/project-map.md)
+for ownership, validation, migration, and upstream synchronization details.

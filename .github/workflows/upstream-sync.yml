@@ -119,7 +119,6 @@ jobs:
             - name: Push tested merge
               if: steps.sync.outcome == 'success'
               run: git push origin HEAD:singbox
-
             - name: Verify pushed final commit
               if: steps.sync.outcome == 'success'
               env:

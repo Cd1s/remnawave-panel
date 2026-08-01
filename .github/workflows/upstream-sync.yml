@@ -21,32 +21,88 @@ jobs:
                   ref: singbox
                   fetch-depth: 0
 
-            - name: Merge upstream
+            - name: Detect and merge upstream
+              id: sync
+              env:
+                  UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-conflict-report.md
               run: |
+                  set -euo pipefail
                   git config user.name "github-actions[bot]"
                   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
                   git remote add upstream https://github.com/remnawave/panel.git
                   git fetch upstream main
+
+                  echo "updated=false" >> "$GITHUB_OUTPUT"
                   if git merge-base --is-ancestor upstream/main HEAD; then
-                    echo "Already up to date."
+                    echo "upstream_sync=up_to_date current=$(git rev-parse HEAD) upstream=$(git rev-parse upstream/main)"
                     exit 0
                   fi
-                  git merge --no-edit upstream/main
+
+                  merge_log="${RUNNER_TEMP}/panel-upstream-merge.log"
+                  if git merge --no-edit upstream/main >"$merge_log" 2>&1; then
+                    echo "updated=true" >> "$GITHUB_OUTPUT"
+                    echo "upstream_sync=merged commit=$(git rev-parse HEAD) upstream=$(git rev-parse upstream/main)"
+                    exit 0
+                  fi
+
+                  merge_rc=$?
+                  conflict_files="$(git diff --name-only --diff-filter=U || true)"
+                  {
+                    echo "# Panel upstream synchronization failed"
+                    echo
+                    echo "The maintained branch was not pushed because the upstream merge failed."
+                    echo
+                    echo "- maintained commit: \`$(git rev-parse HEAD)\`"
+                    echo "- upstream commit: \`$(git rev-parse upstream/main)\`"
+                    echo
+                    echo "## Conflicting files"
+                    if [ -n "$conflict_files" ]; then
+                      while IFS= read -r file; do
+                          printf '%s\n' "- \`$file\`"
+                      done <<< "$conflict_files"
+                    else
+                      echo "- none (see merge output below)"
+                    fi
+                    echo
+                    echo "## Git merge output"
+                    echo '```text'
+                    cat "$merge_log"
+                    echo '```'
+                  } > "$UPSTREAM_SYNC_REPORT_PATH"
+                  if ! git merge --abort; then
+                      echo "upstream_sync=error merge_abort_failed" >&2
+                  fi
+                  cat "$UPSTREAM_SYNC_REPORT_PATH" >&2
+                  exit "$merge_rc"
+
+            - name: Upload upstream conflict report
+              if: ${{ always() && steps.sync.outcome == 'failure' }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: upstream-sync-conflict-report
+                  path: ${{ runner.temp }}/upstream-sync-conflict-report.md
+                  if-no-files-found: warn
 
             - uses: actions/setup-node@v4
+              if: steps.sync.outputs.updated == 'true'
               with:
                   node-version: '22.18.0'
                   cache: npm
 
             - run: npm ci --no-audit --no-fund
+              if: steps.sync.outputs.updated == 'true'
             - run: npm run typecheck
+              if: steps.sync.outputs.updated == 'true'
             - run: npm run build
+              if: steps.sync.outputs.updated == 'true'
 
             - name: Verify fork documentation
+              if: steps.sync.outputs.updated == 'true'
               run: |
                   test -f AGENTS.md
                   test -f docs/fork/overview.mdx
                   test -f docs/fork/upstream-maintenance.mdx
 
             - name: Push tested merge
+              if: steps.sync.outputs.updated == 'true'
               run: git push origin HEAD:singbox

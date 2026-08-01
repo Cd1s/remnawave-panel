@@ -75,12 +75,17 @@ sync_release() {
     done <<<"$tag_refs"
 
     set +e
-    release_output="$(gh release view "$UPSTREAM_RELEASE_TAG" --repo "$FORK_REPO" --json url 2>&1)"
+    release_output="$(gh release view "$UPSTREAM_RELEASE_TAG" --repo "$FORK_REPO" --json tagName,url 2>&1)"
     release_rc=$?
     set -e
     release_exists=false
     if [ "$release_rc" -eq 0 ]; then
         release_exists=true
+        existing_release_tag="$(jq -r '.tagName' <<<"$release_output")"
+        if [ "$existing_release_tag" != "$UPSTREAM_RELEASE_TAG" ]; then
+            echo "release_sync=failed reason=release_tag_mismatch expected=${UPSTREAM_RELEASE_TAG} actual=${existing_release_tag:-missing}" >&2
+            exit 1
+        fi
     else
         release_error_lower="$(tr '[:upper:]' '[:lower:]' <<<"$release_output")"
         if [[ "$release_error_lower" != *'release not found'* && "$release_error_lower" != *'http 404'* ]]; then
@@ -90,17 +95,18 @@ sync_release() {
         fi
     fi
 
-    if [ -n "$tag_commit" ] && [ "$tag_commit" != "$FORK_COMMIT" ]; then
-        echo "release_sync=failed reason=tag_points_to_different_commit tag=${UPSTREAM_RELEASE_TAG} expected=${FORK_COMMIT} actual=${tag_commit}" >&2
-        exit 1
-    fi
     if [ "$release_exists" = true ] && [ -z "$tag_commit" ]; then
         echo "release_sync=failed reason=release_exists_but_tag_missing tag=${UPSTREAM_RELEASE_TAG}" >&2
         exit 1
     fi
     if [ "$release_exists" = true ]; then
-        echo "release_sync=skipped tag=${UPSTREAM_RELEASE_TAG} commit=${FORK_COMMIT} reason=already_points_to_final_commit"
+        echo "release_sync=skipped tag=${UPSTREAM_RELEASE_TAG} commit=${FORK_COMMIT} reason=release_and_tag_already_exist"
         exit 0
+    fi
+
+    if [ -n "$tag_commit" ] && [ "$tag_commit" != "$FORK_COMMIT" ]; then
+        echo "release_sync=failed reason=tag_exists_without_release_points_to_different_commit tag=${UPSTREAM_RELEASE_TAG} expected=${FORK_COMMIT} actual=${tag_commit}" >&2
+        exit 1
     fi
 
     notes="Official Remnawave ${UPSTREAM_RELEASE_VERSION} release for the Sing-box/AnyTLS fork.

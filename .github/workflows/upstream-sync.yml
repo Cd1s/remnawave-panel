@@ -106,3 +106,14 @@ jobs:
             - name: Push tested merge
               if: steps.sync.outputs.updated == 'true'
               run: git push origin HEAD:singbox
+            - name: Sync official release
+              if: steps.sync.outputs.updated == 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  set -euo pipefail
+                  upstream_tag="$(gh api repos/remnawave/panel/releases/latest --jq .tag_name)"
+                  target="$(git rev-parse HEAD)"
+                  tag_sha="$(git ls-remote origin "refs/tags/${upstream_tag}^{}" | cut -f1)"
+                  if [ -n "$tag_sha" ] && [ "$tag_sha" != "$target" ]; then echo "release_tag_conflict tag=$upstream_tag existing=$tag_sha target=$target" >&2; exit 1; fi
+                  if gh release view "$upstream_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "release_sync=skipped tag=$upstream_tag target=$target"; else gh release create "$upstream_tag" --repo "$GITHUB_REPOSITORY" --target "$target" --title "Remnawave Panel $upstream_tag — Sing-box/AnyTLS" --notes "Official upstream release: remnawave/panel $upstream_tag\nFork: $GITHUB_REPOSITORY\nBranch: singbox\nCommit: $target\nCI: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"; fi

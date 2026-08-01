@@ -1,0 +1,53 @@
+---
+title: v3 sing-box validation snapshot
+description: Pinned source revisions and validation status for the unofficial v3 sing-box distribution.
+sidebar_position: 3
+---
+
+# v3 sing-box validation snapshot
+
+This is an unofficial compatibility snapshot, not an official Remnawave v3 release. There is no
+official v3 release tag to copy across the four repositories. Each repository keeps its own
+upstream version source and publishes only its maintained `singbox` branch.
+
+## Version sources
+
+| Component | Version source | Snapshot value |
+| --- | --- | --- |
+| Panel | `@remnawave/docs/package.json` | `0.0.1` (documentation package; not a runtime panel version) |
+| Backend | Root `package.json` | `3.0.0`, image metadata `3.0.0-singbox` |
+| Frontend | Root `package.json` after the official v3 merge | `3.0.0` |
+| Node | Root `package.json` | `2.8.0`, image metadata `2.8.0-singbox` |
+
+Node has no official `3.0.0` in the synchronized upstream source, so this snapshot does not
+invent one.
+
+## Pinned source revisions
+
+These are the exact `singbox` revisions used for this validation record. The panel revision is the
+parent commit containing the fail-safe synchronization workflow; this documentation page is a
+docs-only overlay on top of it.
+
+| Component | Repository | Commit |
+| --- | --- | --- |
+| Panel workflow baseline | [`Cd1s/remnawave-panel`](https://github.com/Cd1s/remnawave-panel) | `fa3f7ab` |
+| Backend | [`Cd1s/remnawave-backend`](https://github.com/Cd1s/remnawave-backend) | `93cf3158` |
+| Frontend | [`Cd1s/remnawave-frontend`](https://github.com/Cd1s/remnawave-frontend) | `554a37bc` |
+| Node | [`Cd1s/remnawave-node`](https://github.com/Cd1s/remnawave-node) | `d8a948b` |
+
+Use the full remote SHA reported by the release automation and the GitHub Actions run before
+deploying an immutable image digest.
+
+## Validation status
+
+The local gates for this snapshot are:
+
+- Frontend: `npm ci`, `npm run typecheck`, `npm run check`, and `npm run start:build` passed.
+- Panel: `npm ci`, `npm run typecheck`, and `npm run build` passed; Docusaurus emitted only
+  existing documentation warnings.
+- Backend: `npm ci`, `npm run build`, `npm run build:seed`, `npm run validate:seed-core-inbounds`,
+  `npm run validate:shadowrocket-anytls`, and `npm run check` passed.
+- Node: `npm ci`, `npm run build`, `npm run trace`, and `npm run check` passed.
+
+The four upstream synchronization workflows fail safely on merge conflicts, upload a readable
+conflict report, and push only after repository validation and any applicable image build finish.

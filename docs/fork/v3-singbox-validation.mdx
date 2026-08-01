@@ -6,21 +6,25 @@ sidebar_position: 3
 
 # v3 sing-box validation snapshot
 
-This is an unofficial compatibility snapshot, not an official Remnawave v3 release. There is no
-official v3 release tag to copy across the four repositories. Each repository keeps its own
-upstream version source and publishes only its maintained `singbox` branch.
+This is an unofficial sing-box compatibility fork based on the official
+[Remnawave Panel v3.0.0 release](https://github.com/remnawave/panel/releases/tag/3.0.0). The
+official release is named `v3.0.0`, uses tag `3.0.0`, was published at `2026-07-31T20:17:10Z`,
+and its official `main` baseline is
+`0d8edf6c8031718160831590677bdaf29c926e2d`. Each fork repository keeps its own upstream version
+source and publishes only its maintained `singbox` branch.
 
 ## Version sources
 
 | Component | Version source | Snapshot value |
 | --- | --- | --- |
-| Panel | `@remnawave/docs/package.json` | `0.0.1` (documentation package; not a runtime panel version) |
+| Panel | Official `remnawave/panel` Release | `v3.0.0` (tag `3.0.0`; published `2026-07-31T20:17:10Z`) |
 | Backend | Root `package.json` | `3.0.0`, image metadata `3.0.0-singbox` |
 | Frontend | Root `package.json` after the official v3 merge | `3.0.0` |
 | Node | Root `package.json` | `2.8.0`, image metadata `2.8.0-singbox` |
 
-Node has no official `3.0.0` in the synchronized upstream source, so this snapshot does not
-invent one.
+The panel repository's root `package.json` is a Docusaurus documentation package and its
+internal `0.0.1` value is not the Panel release version. Node has no official `3.0.0` in the
+synchronized upstream source, so this snapshot does not invent one.
 
 ## Pinned source revisions
 
@@ -30,7 +34,8 @@ docs-only overlay on top of it.
 
 | Component | Repository | Commit |
 | --- | --- | --- |
-| Panel workflow baseline | [`Cd1s/remnawave-panel`](https://github.com/Cd1s/remnawave-panel) | `fa3f7ab` |
+| Panel official v3.0.0 baseline | [`remnawave/panel`](https://github.com/remnawave/panel) | `0d8edf6c8031718160831590677bdaf29c926e2d` |
+| Panel fork workflow baseline | [`Cd1s/remnawave-panel`](https://github.com/Cd1s/remnawave-panel) | `fa3f7ab` |
 | Backend | [`Cd1s/remnawave-backend`](https://github.com/Cd1s/remnawave-backend) | `93cf3158` |
 | Frontend | [`Cd1s/remnawave-frontend`](https://github.com/Cd1s/remnawave-frontend) | `554a37bc` |
 | Node | [`Cd1s/remnawave-node`](https://github.com/Cd1s/remnawave-node) | `cd635cf` |

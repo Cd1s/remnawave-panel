@@ -51,6 +51,15 @@ sync_release() {
     fi
     remote_head="$(awk 'NR == 1 { print $1 }' <<<"$remote_head")"
     if [ "$remote_head" != "$FORK_COMMIT" ]; then
+        if git cat-file -e "${remote_head}^{commit}" >/dev/null 2>&1 || {
+            git fetch --no-tags origin refs/heads/singbox >/dev/null 2>&1 &&
+            git cat-file -e "${remote_head}^{commit}" >/dev/null 2>&1
+        }; then
+            if git merge-base --is-ancestor "$FORK_COMMIT" "$remote_head"; then
+                echo "release_sync=skipped reason=superseded_by_newer_sync expected=${FORK_COMMIT} actual=${remote_head}"
+                exit 0
+            fi
+        fi
         echo "release_sync=failed reason=remote_branch_not_at_final_commit expected=${FORK_COMMIT} actual=${remote_head:-missing}" >&2
         exit 1
     fi

@@ -44,12 +44,20 @@ EOF
 
 run_sync() {
     local behavior=$1
-    ( cd "$repo"; PATH="$mock_bin:$PATH" GH_BEHAVIOR="$behavior" GH_CALL_LOG="$call_log" FORK_REPO=Cd1s/remnawave-test FORK_COMMIT="$new_sha" UPSTREAM_REPO=remnawave/panel UPSTREAM_RELEASE_TAG=3.0.0 UPSTREAM_RELEASE_URL=https://github.com/remnawave/panel/releases/tag/3.0.0 UPSTREAM_RELEASE_VERSION=3.0.0 CI_RUN_URL=https://github.com/Cd1s/remnawave-test/actions/runs/1 bash "$SCRIPT" sync )
+    run_sync_commit "$behavior" "$new_sha"
+}
+
+run_sync_commit() {
+    local behavior=$1
+    local commit=$2
+    ( cd "$repo"; PATH="$mock_bin:$PATH" GH_BEHAVIOR="$behavior" GH_CALL_LOG="$call_log" FORK_REPO=Cd1s/remnawave-test FORK_COMMIT="$commit" UPSTREAM_REPO=remnawave/panel UPSTREAM_RELEASE_TAG=3.0.0 UPSTREAM_RELEASE_URL=https://github.com/remnawave/panel/releases/tag/3.0.0 UPSTREAM_RELEASE_VERSION=3.0.0 CI_RUN_URL=https://github.com/Cd1s/remnawave-test/actions/runs/1 bash "$SCRIPT" sync )
 }
 
 test_resolve() { make_repo; output_file="$fixture_root/output"; ( cd "$repo"; : >"$output_file"; PATH="$mock_bin:$PATH" GH_BEHAVIOR=resolve GH_CALL_LOG="$call_log" GITHUB_OUTPUT="$output_file" UPSTREAM_REPO=remnawave/panel bash "$SCRIPT" resolve ) >/dev/null 2>&1 || return 1; assert_file_contains "$output_file" 'tag=v3.0.0' && assert_file_contains "$output_file" 'version=3.0.0'; }
 test_historical_skip() { make_repo historical; output="$(run_sync existing 2>&1)" || return 1; assert_contains "$output" 'release_sync=skipped' || return 1; ! grep -Fq 'release create' "$call_log"; }
 test_create() { make_repo; output="$(run_sync missing 2>&1)" || return 1; assert_contains "$output" 'release_sync=created' || return 1; grep -Fq 'release create' "$call_log"; }
+test_superseded_sync_is_skipped_without_release_side_effects() { make_repo; output="$(run_sync_commit missing "$old_sha" 2>&1)" || return 1; assert_contains "$output" 'release_sync=skipped reason=superseded_by_newer_sync' || return 1; [ ! -s "$call_log" ]; }
+test_diverged_branch_fails_closed() { make_repo; git -C "$repo" checkout -q -b divergent "$old_sha"; printf 'diverged\n' >>"$repo/state"; git -C "$repo" add state; git -C "$repo" commit -q -m divergent; divergent_sha="$(git -C "$repo" rev-parse HEAD)"; git -C "$repo" push -q --force origin HEAD:singbox; output="$(run_sync_commit missing "$new_sha" 2>&1)" && return 1; assert_contains "$output" "release_sync=failed reason=remote_branch_not_at_final_commit expected=${new_sha} actual=${divergent_sha}"; }
 test_different_tag_fails() { make_repo historical; output="$(run_sync missing 2>&1)" && return 1; assert_contains "$output" 'tag_exists_without_release_points_to_different_commit'; }
 test_missing_tag_fails() { make_repo; output="$(run_sync existing 2>&1)" && return 1; assert_contains "$output" 'release_exists_but_tag_missing'; }
 test_query_fails() { make_repo; output="$(run_sync query-error 2>&1)" && return 1; assert_contains "$output" 'release_query_error'; }
@@ -60,6 +68,6 @@ test_workflow_contract() {
 }
 test_preflight_contract() { assert_file_contains "$WORKFLOW" 'GH_TOKEN: ${{ github.token }}' && assert_file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' && assert_file_contains "$WORKFLOW" 'WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}' && assert_file_contains "$WORKFLOW" 'WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' && assert_file_contains "$WORKFLOW" 'GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header"' && ! grep -Fq -- 'PACKAGE_TOKEN:' "$WORKFLOW" && ! grep -Fq -- 'user/packages' "$WORKFLOW" && ! grep -Fq -- 'actions/workflows' "$WORKFLOW" && ! grep -Fq -- 'permissions.push' "$WORKFLOW"; }
 run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
-run_case test_resolve; run_case test_historical_skip; run_case test_create; run_case test_different_tag_fails; run_case test_missing_tag_fails; run_case test_query_fails; run_case test_structure_fails; run_case test_workflow_contract; run_case test_preflight_contract
+run_case test_resolve; run_case test_historical_skip; run_case test_create; run_case test_superseded_sync_is_skipped_without_release_side_effects; run_case test_diverged_branch_fails_closed; run_case test_different_tag_fails; run_case test_missing_tag_fails; run_case test_query_fails; run_case test_structure_fails; run_case test_workflow_contract; run_case test_preflight_contract
 [ "$failures" -eq 0 ] || exit 1
 printf 'all sync contract tests passed\n'

@@ -9,6 +9,10 @@ permissions:
   contents: write
   actions: read
 
+# `workflows` is a GitHub App/PAT repository permission, not an Actions `permissions` key.
+# WORKFLOW_TOKEN must grant contents:write + workflows:write; release access is preflighted
+# before any write or published artifact.
+
 concurrency:
   group: upstream-sync-panel
   cancel-in-progress: false
@@ -76,13 +80,14 @@ jobs:
       - name: Verify write capabilities before push
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: |
           set -euo pipefail
           test -n "$WORKFLOW_TOKEN"
+          git config --local --unset-all http.https://github.com/.extraheader || true
           auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
@@ -100,6 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$WORKFLOW_TOKEN"
+          git config --local --unset-all http.https://github.com/.extraheader || true
           auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \

@@ -76,21 +76,14 @@ jobs:
       - name: Verify write capabilities before push
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
-          WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: |
           set -euo pipefail
           test -n "$WORKFLOW_TOKEN"
-          push_token="$GITHUB_TOKEN"
-          if [ "$WORKFLOW_CHANGED" = true ]; then
-            test -n "$WORKFLOW_TOKEN" || { echo 'upstream_sync=failed reason=missing_WORKFLOW_TOKEN workflow_files_changed' >&2; exit 1; }
-            push_token="$WORKFLOW_TOKEN"
-          fi
-          auth_header="$(printf 'x-access-token:%s' "$push_token" | base64 | tr -d '\n')"
+          auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
@@ -103,17 +96,11 @@ jobs:
       - name: Push tested merge
         if: steps.sync.outcome == 'success'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
-          WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}
         run: |
           set -euo pipefail
-          push_token="$GITHUB_TOKEN"
-          if [ "$WORKFLOW_CHANGED" = true ]; then
-            test -n "$WORKFLOW_TOKEN" || { echo 'upstream_sync=failed reason=missing_WORKFLOW_TOKEN workflow_files_changed' >&2; exit 1; }
-            push_token="$WORKFLOW_TOKEN"
-          fi
-          auth_header="$(printf 'x-access-token:%s' "$push_token" | base64 | tr -d '\n')"
+          test -n "$WORKFLOW_TOKEN"
+          auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
@@ -128,7 +115,7 @@ jobs:
       - name: Sync official fork Release
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           FORK_REPO: ${{ github.repository }}
           FORK_COMMIT: ${{ steps.source.outputs.sha }}
           UPSTREAM_REPO: remnawave/panel

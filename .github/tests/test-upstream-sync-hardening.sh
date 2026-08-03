@@ -164,6 +164,19 @@ EOF
 
 test_capability_preflight_rejects_actions_bypass_v2() {
     make_repo
+    cat >"$mock_bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+if [ "${1:-}" = api ]; then
+    case "${2:-}" in
+        repos/Cd1s/test) printf '{"permissions":{"push":false}}\n' ;;
+        *) printf '{}\n' ;;
+    esac
+    exit 0
+fi
+exit 2
+EOF
+    chmod +x "$mock_bin/gh"
     result="$(cd "$repo"; PATH="$mock_bin:$PATH" GITHUB_REPOSITORY=Cd1s/test WORKFLOW_TOKEN=present GH_TOKEN=present PACKAGE_TOKEN=present SKIP_GIT_DRY_RUN=true GITHUB_ACTIONS=true bash "$LIB" preflight 2>&1)" && return 1
     contains "$result" 'reason=contents_write_denied'
 }

@@ -82,7 +82,8 @@ jobs:
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: |
           set -euo pipefail
-          auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\\n')"
+          test -n "$WORKFLOW_TOKEN"
+          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
@@ -109,10 +110,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$WORKFLOW_TOKEN"
-          auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\\n')"
-          GIT_CONFIG_COUNT=1 \
-          GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
-          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
           git push origin HEAD:singbox
       - name: Verify pushed final commit
         if: steps.sync.outcome == 'success'

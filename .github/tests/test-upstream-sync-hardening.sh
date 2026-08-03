@@ -99,20 +99,19 @@ test_checkout_and_readonly_resolver_use_fallback_token() {
         file_contains "$WORKFLOW" 'WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}'
 }
 
-test_push_uses_process_scoped_workflow_auth() {
+test_push_uses_ephemeral_workflow_auth() {
     file_contains "$WORKFLOW" 'GIT_CONFIG_KEY_0=http.https://github.com/.extraheader' &&
     file_contains "$WORKFLOW" 'GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header"' &&
-        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' &&
-        ! file_contains "$WORKFLOW" 'WORKFLOW_CHANGED:' &&
-        ! file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' &&
+        file_contains "$WORKFLOW" 'WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}' &&
+        file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' &&
         file_contains "$WORKFLOW" 'git config --unset-all http.https://github.com/.extraheader || true' &&
         ! file_contains "$WORKFLOW" 'Configure ephemeral GitHub auth for push'
 }
 
 test_push_auth_never_duplicates_checkout_extraheader() {
-    ! file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' || return 1
-    ! file_contains "$WORKFLOW" 'WORKFLOW_CHANGED:' || return 1
-    ! file_contains "$WORKFLOW" 'push_token=' || return 1
+    file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' || return 1
+    file_contains "$WORKFLOW" 'WORKFLOW_CHANGED:' || return 1
+    [ "$(grep -Fc 'if [ "$push_token" = "$GITHUB_TOKEN" ]; then' "$WORKFLOW")" -eq 0 ] || return 1
     [ "$(grep -Fc 'git config --unset-all http.https://github.com/.extraheader || true' "$WORKFLOW")" -eq 2 ] || return 1
     [ "$(grep -Fc 'GIT_CONFIG_COUNT=1' "$WORKFLOW")" -eq 2 ] || return 1
     awk '/if \[.*push_token.*GITHUB_TOKEN.*\]; then/ { in_auth=1; saw_else=0; next } in_auth && /else/ { saw_else=1; next } in_auth && /git config --unset-all http\.https:\/\/github\.com\/\.extraheader \|\| true/ && !saw_else { exit 1 } in_auth && /GIT_CONFIG_COUNT=1/ && !saw_else { exit 1 } in_auth && /fi/ { if (!saw_else) exit 1; in_auth=0 } END { if (in_auth) exit 1 }' "$WORKFLOW"
@@ -144,7 +143,7 @@ EOF
     grep -Fq 'user/packages' "$call_log"
 }
 
-test_capability_preflight_requires_workflow_token_before_probes() {
+test_capability_preflight_accepts_token_without_permissions_and_skips_forbidden_probes() {
     make_repo
     call_log="$fixture_root/gh.log"
     cat >"$mock_bin/gh" <<'EOF'
@@ -153,22 +152,26 @@ set -eu
 printf '%s\n' "$*" >>"$GH_CALL_LOG"
 if [ "${1:-}" = api ]; then
     case "${2:-}" in
-        *) exit 97 ;;
+        repos/Cd1s/test) [ "${3:-}" = --jq ] && printf '123\n' || printf '{"id":123}\n' ;;
+        "repos/Cd1s/test/releases?per_page=1") printf '[]\n' ;;
+        "user/packages?package_type=container&per_page=1"|"repos/Cd1s/test/actions/workflows") exit 97 ;;
+        *) exit 2 ;;
     esac
     exit 0
 fi
 exit 2
 EOF
     chmod +x "$mock_bin/gh"
-    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GH_CALL_LOG="$call_log" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token WORKFLOW_CHANGED=false WORKFLOW_TOKEN= bash "$LIB" preflight 2>&1)" && return 1
-    contains "$result" 'reason=missing_WORKFLOW_TOKEN requires_contents_workflows_packages_release_write' || return 1
-    [ ! -s "$call_log" ]
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GH_CALL_LOG="$call_log" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token WORKFLOW_CHANGED=false WORKFLOW_TOKEN= bash "$LIB" preflight 2>&1)" || return 1
+    contains "$result" 'capability_preflight=passed' || return 1
+    ! grep -Fq 'user/packages' "$call_log" || return 1
+    ! grep -Fq 'actions/workflows' "$call_log"
 }
 
 test_workflow_diff_without_token_fails_closed() {
     make_repo
     result="$(cd "$repo"; PATH="$mock_bin:$PATH" GITHUB_REPOSITORY=Cd1s/test WORKFLOW_CHANGED=true WORKFLOW_TOKEN= bash "$LIB" preflight 2>&1)" && return 1
-    contains "$result" 'reason=missing_WORKFLOW_TOKEN requires_contents_workflows_packages_release_write'
+    contains "$result" 'reason=missing_WORKFLOW_TOKEN workflow_files_changed'
 }
 
 test_capability_preflight_rejects_missing_workflow_token_v2() {
@@ -218,9 +221,9 @@ run_case test_resolver; run_case test_empty_and_network_errors_classified; run_c
 run_case test_upstream_tag_fetch_is_namespaced
 run_case test_panel_release_contract_uses_official_tag
 run_case test_checkout_and_readonly_resolver_use_fallback_token
-run_case test_push_uses_process_scoped_workflow_auth
+run_case test_push_uses_ephemeral_workflow_auth
 run_case test_push_auth_never_duplicates_checkout_extraheader
-run_case test_capability_preflight_requires_workflow_token_before_probes
+run_case test_capability_preflight_accepts_token_without_permissions_and_skips_forbidden_probes
 run_case test_workflow_diff_without_token_fails_closed
 [ "$failures" -eq 0 ] || exit 1
 printf 'all upstream hardening tests passed\n'

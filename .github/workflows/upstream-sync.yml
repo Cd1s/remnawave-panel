@@ -41,8 +41,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/remnawave/panel.git
-          git fetch upstream main
-          git fetch upstream "refs/tags/${{ steps.release.outputs.tag }}:refs/tags/upstream-release-${{ steps.release.outputs.tag }}"
+          git fetch --no-tags upstream main
+          git fetch --no-tags upstream "refs/tags/${{ steps.release.outputs.tag }}:refs/tags/upstream-release-${{ steps.release.outputs.tag }}"
           bash .github/scripts/upstream-sync-lib.sh merge
 
       - uses: actions/setup-node@v4
@@ -50,16 +50,14 @@ jobs:
         with:
           node-version: '22.18.0'
           cache: npm
-      - name: Verify panel release/package contract
+      - name: Verify panel release contract
         if: steps.sync.outcome == 'success'
         env:
           UPSTREAM_REF: ${{ steps.release.outputs.commit }}
-          PACKAGE_PATHS: package.json
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: |
-          # panel/package.json is the Docusaurus documentation package; the official release tag
-          # is the runtime version source and must be checked independently.
-          bash .github/scripts/upstream-sync-lib.sh package
+          set -euo pipefail
+          test "$(git rev-parse "$UPSTREAM_REF")" = "${{ steps.release.outputs.commit }}"
           echo "official_panel_release_tag=${{ steps.release.outputs.tag }} version=${{ steps.release.outputs.version }}"
       - run: npm ci --no-audit --no-fund
         if: steps.sync.outcome == 'success'

@@ -63,6 +63,19 @@ test_merge_and_abort_contract() {
     contains "$result" 'upstream_sync=up_to_date'
 }
 
+test_current_release_contract_does_not_require_package_json() {
+    make_repo
+    git -C "$repo" checkout -q -b upstream-release HEAD~1
+    printf 'Backend: v3.2.0\nFrontend: v3.2.0\n' >"$repo/current-release.md"
+    git -C "$repo" add current-release.md
+    git -C "$repo" commit -q -m upstream-release
+    release_sha="$(git -C "$repo" rev-parse HEAD)"
+    git -C "$repo" checkout -q singbox
+    printf 'Backend: v3.2.0\nFrontend: v3.2.0\n' >"$repo/current-release.md"
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" UPSTREAM_REF="$release_sha" RELEASE_FILE_PATH=current-release.md bash "$LIB" release-file 2>&1)" || return 1
+    contains "$result" 'release_contract=passed'
+}
+
 test_workflow_contract() {
     file_contains "$WORKFLOW" '*/5 * * * *' || return 1; [ -z "$(awk '/^jobs:/{exit} /\$\{\{ runner\.temp \}\}/{print NR}' "$WORKFLOW")" ] || return 1; file_contains "$WORKFLOW" 'workflow_dispatch:' || return 1; file_contains "$WORKFLOW" 'cancel-in-progress: false' || return 1; file_contains "$WORKFLOW" 'WORKFLOW_TOKEN' || return 1; file_contains "$WORKFLOW" 'upstream-sync-lib.sh preflight' || return 1; file_contains "$WORKFLOW" 'actions/upload-artifact@v4' || return 1
     preflight_line="$(grep -n -m1 'upstream-sync-lib.sh preflight' "$WORKFLOW" | cut -d: -f1)"; push_line="$(grep -n -m1 'git push origin HEAD:singbox' "$WORKFLOW" | cut -d: -f1)"; [ -n "$preflight_line" ] && [ -n "$push_line" ] && [ "$preflight_line" -lt "$push_line" ] || return 1
@@ -76,12 +89,20 @@ test_upstream_tag_fetch_is_namespaced() {
 
 test_panel_release_contract_uses_official_tag() {
     ! file_contains "$WORKFLOW" 'bash .github/scripts/upstream-sync-lib.sh package' &&
+        file_contains "$WORKFLOW" 'bash .github/scripts/upstream-sync-lib.sh release-file' &&
         file_contains "$WORKFLOW" 'official_panel_release_tag=${{ steps.release.outputs.tag }}'
 }
 
+test_checkout_and_readonly_resolver_use_workflow_token() {
+    file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN }}' &&
+        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' &&
+        ! file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}'
+}
+
 run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
-run_case test_resolver; run_case test_empty_and_network_errors_classified; run_case test_merge_and_abort_contract; run_case test_workflow_contract
+run_case test_resolver; run_case test_empty_and_network_errors_classified; run_case test_merge_and_abort_contract; run_case test_current_release_contract_does_not_require_package_json; run_case test_workflow_contract
 run_case test_upstream_tag_fetch_is_namespaced
 run_case test_panel_release_contract_uses_official_tag
+run_case test_checkout_and_readonly_resolver_use_workflow_token
 [ "$failures" -eq 0 ] || exit 1
 printf 'all upstream hardening tests passed\n'

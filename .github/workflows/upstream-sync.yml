@@ -50,14 +50,15 @@ jobs:
         with:
           node-version: '22.18.0'
           cache: npm
-      - name: Verify panel release contract
+      - name: Verify panel current-release contract
         if: steps.sync.outcome == 'success'
         env:
           UPSTREAM_REF: ${{ steps.release.outputs.commit }}
+          RELEASE_FILE_PATH: current-release.md
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: |
           set -euo pipefail
-          test "$(git rev-parse "$UPSTREAM_REF")" = "${{ steps.release.outputs.commit }}"
+          bash .github/scripts/upstream-sync-lib.sh release-file
           echo "official_panel_release_tag=${{ steps.release.outputs.tag }} version=${{ steps.release.outputs.version }}"
       - run: npm ci --no-audit --no-fund
         if: steps.sync.outcome == 'success'
@@ -75,7 +76,7 @@ jobs:
       - name: Verify write capabilities before push
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
@@ -97,7 +98,7 @@ jobs:
       - name: Sync official fork Release
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           FORK_REPO: ${{ github.repository }}
           FORK_COMMIT: ${{ steps.source.outputs.sha }}
           UPSTREAM_REPO: remnawave/panel

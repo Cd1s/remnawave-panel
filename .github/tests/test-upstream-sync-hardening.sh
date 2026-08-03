@@ -139,7 +139,7 @@ test_workflow_diff_without_token_fails_closed() {
     contains "$result" 'reason=missing_WORKFLOW_TOKEN requires_contents_workflows_packages_release_write'
 }
 
-test_capability_preflight_accepts_github_token_without_permissions_v2() {
+test_capability_preflight_rejects_missing_workflow_token_v2() {
     make_repo
     call_log="$fixture_root/gh.log"
     cat >"$mock_bin/gh" <<'EOF'
@@ -158,16 +158,14 @@ fi
 exit 2
 EOF
     chmod +x "$mock_bin/gh"
-    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GH_CALL_LOG="$call_log" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token GITHUB_RUN_ID=panel-v2 bash "$LIB" preflight 2>&1)" || return 1
-    contains "$result" 'capability_preflight=passed' || return 1
-    grep -Fq 'repos/Cd1s/test --jq .id' "$call_log" || return 1
-    ! grep -Eq 'user/packages|actions/workflows' "$call_log"
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GITHUB_REPOSITORY=Cd1s/test WORKFLOW_TOKEN= bash "$LIB" preflight 2>&1)" && return 1
+    contains "$result" 'reason=missing_WORKFLOW_TOKEN requires_contents_workflows_packages_release_write'
 }
 
-test_workflow_diff_without_token_fails_closed_v2() {
+test_capability_preflight_rejects_actions_bypass_v2() {
     make_repo
-    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token WORKFLOW_CHANGED=true WORKFLOW_TOKEN= bash "$LIB" preflight 2>&1)" && return 1
-    contains "$result" 'reason=missing_WORKFLOW_TOKEN workflow_files_changed'
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GITHUB_REPOSITORY=Cd1s/test WORKFLOW_TOKEN=present GH_TOKEN=present PACKAGE_TOKEN=present SKIP_GIT_DRY_RUN=true GITHUB_ACTIONS=true bash "$LIB" preflight 2>&1)" && return 1
+    contains "$result" 'reason=contents_write_denied'
 }
 
 run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
@@ -176,7 +174,7 @@ run_case test_upstream_tag_fetch_is_namespaced
 run_case test_panel_release_contract_uses_official_tag
 run_case test_checkout_and_readonly_resolver_use_fallback_token
 run_case test_push_uses_ephemeral_workflow_auth
-run_case test_capability_preflight_accepts_github_token_without_permissions_v2
-run_case test_workflow_diff_without_token_fails_closed_v2
+run_case test_capability_preflight_rejects_missing_workflow_token_v2
+run_case test_capability_preflight_rejects_actions_bypass_v2
 [ "$failures" -eq 0 ] || exit 1
 printf 'all upstream hardening tests passed\n'

@@ -90,6 +90,7 @@ jobs:
             test -n "$WORKFLOW_TOKEN" || { echo 'upstream_sync=failed reason=missing_WORKFLOW_TOKEN workflow_files_changed' >&2; exit 1; }
             push_token="$WORKFLOW_TOKEN"
           fi
+          git config --local --unset-all http.https://github.com/.extraheader || true
           auth_header="$(printf 'x-access-token:%s' "$push_token" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
@@ -113,6 +114,7 @@ jobs:
             test -n "$WORKFLOW_TOKEN" || { echo 'upstream_sync=failed reason=missing_WORKFLOW_TOKEN workflow_files_changed' >&2; exit 1; }
             push_token="$WORKFLOW_TOKEN"
           fi
+          git config --local --unset-all http.https://github.com/.extraheader || true
           auth_header="$(printf 'x-access-token:%s' "$push_token" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \

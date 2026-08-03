@@ -1,144 +1,115 @@
 name: Sync upstream
 
 on:
-    schedule:
-        - cron: '55 3 * * *'
-    workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 permissions:
-    contents: write
+  contents: write
+  actions: read
 
 concurrency:
-    group: upstream-sync-panel
-    cancel-in-progress: false
+  group: upstream-sync-panel
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
 
 jobs:
-    sync:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  ref: singbox
-                  fetch-depth: 0
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: singbox
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
 
-            - name: Resolve official latest release
-              id: release
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  UPSTREAM_REPO: remnawave/panel
-              run: bash .github/scripts/sync-release.sh resolve
+      - name: Resolve official latest stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: remnawave/panel
+        run: bash .github/scripts/upstream-sync-lib.sh resolve
 
-            - name: Detect and merge upstream
-              id: sync
-              env:
-                  UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-conflict-report.md
-              run: |
-                  set -euo pipefail
-                  git config user.name "github-actions[bot]"
-                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-                  git remote add upstream https://github.com/remnawave/panel.git
-                  git fetch upstream main
+      - name: Detect and merge upstream
+        id: sync
+        env:
+          UPSTREAM_REF: ${{ steps.release.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/remnawave/panel.git
+          git fetch upstream main --tags
+          bash .github/scripts/upstream-sync-lib.sh merge
 
-                  echo "updated=false" >> "$GITHUB_OUTPUT"
-                  if git merge-base --is-ancestor upstream/main HEAD; then
-                    echo "upstream_sync=up_to_date current=$(git rev-parse HEAD) upstream=$(git rev-parse upstream/main)"
-                    exit 0
-                  fi
+      - uses: actions/setup-node@v4
+        if: steps.sync.outcome == 'success'
+        with:
+          node-version: '22.18.0'
+          cache: npm
+      - name: Verify panel release/package contract
+        if: steps.sync.outcome == 'success'
+        env:
+          UPSTREAM_REF: ${{ steps.release.outputs.commit }}
+          PACKAGE_PATHS: package.json
+        run: |
+          # panel/package.json is the Docusaurus documentation package; the official release tag
+          # is the runtime version source and must be checked independently.
+          bash .github/scripts/upstream-sync-lib.sh package
+          echo "official_panel_release_tag=${{ steps.release.outputs.tag }} version=${{ steps.release.outputs.version }}"
+      - run: npm ci --no-audit --no-fund
+        if: steps.sync.outcome == 'success'
+      - run: npm run typecheck
+        if: steps.sync.outcome == 'success'
+      - run: npm run build
+        if: steps.sync.outcome == 'success'
+      - name: Verify fork documentation
+        if: steps.sync.outcome == 'success'
+        run: |
+          test -f AGENTS.md
+          test -f docs/fork/overview.mdx
+          test -f docs/fork/upstream-maintenance.mdx
 
-                  merge_log="${RUNNER_TEMP}/panel-upstream-merge.log"
-                  if git merge --no-edit upstream/main >"$merge_log" 2>&1; then
-                    echo "updated=true" >> "$GITHUB_OUTPUT"
-                    echo "upstream_sync=merged commit=$(git rev-parse HEAD) upstream=$(git rev-parse upstream/main)"
-                    exit 0
-                  fi
-
-                  merge_rc=$?
-                  conflict_files="$(git diff --name-only --diff-filter=U || true)"
-                  {
-                    echo "# Panel upstream synchronization failed"
-                    echo
-                    echo "The maintained branch was not pushed because the upstream merge failed."
-                    echo
-                    echo "- maintained commit: \`$(git rev-parse HEAD)\`"
-                    echo "- upstream commit: \`$(git rev-parse upstream/main)\`"
-                    echo
-                    echo "## Conflicting files"
-                    if [ -n "$conflict_files" ]; then
-                        while IFS= read -r file; do
-                            printf '%s\n' "- \`$file\`"
-                        done <<< "$conflict_files"
-                    else
-                        echo "- none (see merge output below)"
-                    fi
-                    echo
-                    echo "## Git merge output"
-                    echo '```text'
-                    cat "$merge_log"
-                    echo '```'
-                  } > "$UPSTREAM_SYNC_REPORT_PATH"
-                  if ! git merge --abort; then
-                      echo "upstream_sync=error merge_abort_failed" >&2
-                  fi
-                  cat "$UPSTREAM_SYNC_REPORT_PATH" >&2
-                  exit "$merge_rc"
-
-            - name: Upload upstream conflict report
-              if: ${{ always() && steps.sync.outcome == 'failure' }}
-              uses: actions/upload-artifact@v4
-              with:
-                  name: upstream-sync-conflict-report
-                  path: ${{ runner.temp }}/upstream-sync-conflict-report.md
-                  if-no-files-found: warn
-
-            - uses: actions/setup-node@v4
-              if: steps.sync.outcome == 'success'
-              with:
-                  node-version: '22.18.0'
-                  cache: npm
-
-            - run: npm ci --no-audit --no-fund
-              if: steps.sync.outcome == 'success'
-            - run: npm run typecheck
-              if: steps.sync.outcome == 'success'
-            - run: npm run build
-              if: steps.sync.outcome == 'success'
-
-            - name: Verify fork documentation
-              if: steps.sync.outcome == 'success'
-              run: |
-                  test -f AGENTS.md
-                  test -f docs/fork/overview.mdx
-                  test -f docs/fork/upstream-maintenance.mdx
-                  echo "official_panel_release_tag=${{ steps.release.outputs.tag }} version=${{ steps.release.outputs.version }}"
-
-            - name: Resolve final fork commit
-              id: source
-              if: steps.sync.outcome == 'success'
-              run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-            - name: Push tested merge
-              if: steps.sync.outcome == 'success'
-              run: git push origin HEAD:singbox
-            - name: Verify pushed final commit
-              if: steps.sync.outcome == 'success'
-              env:
-                  EXPECTED_SHA: ${{ steps.source.outputs.sha }}
-              run: |
-                  remote_sha="$(git ls-remote origin refs/heads/singbox | awk 'NR == 1 { print $1 }')"
-                  if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
-                      echo "release_sync=failed reason=remote_branch_not_at_final_commit expected=$EXPECTED_SHA actual=${remote_sha:-missing}" >&2
-                      exit 1
-                  fi
-
-            - name: Sync official fork Release
-              if: steps.sync.outcome == 'success'
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  FORK_REPO: ${{ github.repository }}
-                  FORK_COMMIT: ${{ steps.source.outputs.sha }}
-                  UPSTREAM_REPO: remnawave/panel
-                  UPSTREAM_RELEASE_TAG: ${{ steps.release.outputs.tag }}
-                  UPSTREAM_RELEASE_URL: ${{ steps.release.outputs.url }}
-                  UPSTREAM_RELEASE_VERSION: ${{ steps.release.outputs.version }}
-                  CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-              run: bash .github/scripts/sync-release.sh sync
+      - name: Verify write capabilities before push
+        if: steps.sync.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/upstream-sync-lib.sh preflight
+      - name: Resolve final fork commit
+        id: source
+        if: steps.sync.outcome == 'success'
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Push tested merge
+        if: steps.sync.outcome == 'success'
+        run: git push origin HEAD:singbox
+      - name: Verify pushed final commit
+        if: steps.sync.outcome == 'success'
+        env:
+          EXPECTED_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          remote_sha="$(git ls-remote origin refs/heads/singbox | awk 'NR == 1 { print $1 }')"
+          test "$remote_sha" = "$EXPECTED_SHA" || { echo "release_sync=failed reason=remote_branch_not_at_final_commit expected=$EXPECTED_SHA actual=${remote_sha:-missing}" >&2; exit 1; }
+      - name: Sync official fork Release
+        if: steps.sync.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          FORK_REPO: ${{ github.repository }}
+          FORK_COMMIT: ${{ steps.source.outputs.sha }}
+          UPSTREAM_REPO: remnawave/panel
+          UPSTREAM_RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          UPSTREAM_RELEASE_URL: ${{ steps.release.outputs.url }}
+          UPSTREAM_RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/sync-release.sh sync
+      - name: Upload auditable upstream failure report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-sync-report-${{ github.run_id }}
+          path: ${{ env.UPSTREAM_SYNC_REPORT_PATH }}
+          if-no-files-found: warn

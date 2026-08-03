@@ -13,9 +13,6 @@ concurrency:
   group: upstream-sync-panel
   cancel-in-progress: false
 
-env:
-  UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
-
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -31,12 +28,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
           UPSTREAM_REPO: remnawave/panel
+          UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: bash .github/scripts/upstream-sync-lib.sh resolve
 
       - name: Detect and merge upstream
         id: sync
         env:
           UPSTREAM_REF: ${{ steps.release.outputs.commit }}
+          UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -55,6 +54,7 @@ jobs:
         env:
           UPSTREAM_REF: ${{ steps.release.outputs.commit }}
           PACKAGE_PATHS: package.json
+          UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: |
           # panel/package.json is the Docusaurus documentation package; the official release tag
           # is the runtime version source and must be checked independently.
@@ -79,6 +79,7 @@ jobs:
           GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: bash .github/scripts/upstream-sync-lib.sh preflight
       - name: Resolve final fork commit
         id: source
@@ -111,5 +112,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: upstream-sync-report-${{ github.run_id }}
-          path: ${{ env.UPSTREAM_SYNC_REPORT_PATH }}
+          path: ${{ runner.temp }}/upstream-sync-report.md
           if-no-files-found: warn

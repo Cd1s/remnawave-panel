@@ -76,18 +76,44 @@ jobs:
       - name: Verify write capabilities before push
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
-        run: bash .github/scripts/upstream-sync-lib.sh preflight
+        run: |
+          set -euo pipefail
+          auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\\n')"
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
+          bash .github/scripts/upstream-sync-lib.sh preflight
+      - name: Configure ephemeral GitHub auth for push
+        if: steps.sync.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          token="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
+          {
+            echo 'GIT_CONFIG_COUNT=1'
+            echo 'GIT_CONFIG_KEY_0=http.https://github.com/.extraheader'
+            echo "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $token"
+          } >> "$GITHUB_ENV"
       - name: Resolve final fork commit
         id: source
         if: steps.sync.outcome == 'success'
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Push tested merge
         if: steps.sync.outcome == 'success'
-        run: git push origin HEAD:singbox
+        env:
+          WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$WORKFLOW_TOKEN"
+          auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\\n')"
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
+          git push origin HEAD:singbox
       - name: Verify pushed final commit
         if: steps.sync.outcome == 'success'
         env:
@@ -98,7 +124,7 @@ jobs:
       - name: Sync official fork Release
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           FORK_REPO: ${{ github.repository }}
           FORK_COMMIT: ${{ steps.source.outputs.sha }}
           UPSTREAM_REPO: remnawave/panel

@@ -21,12 +21,12 @@ jobs:
         with:
           ref: singbox
           fetch-depth: 0
-          token: ${{ secrets.WORKFLOW_TOKEN || github.token }}
+          token: ${{ github.token }}
 
       - name: Resolve official latest stable release
         id: release
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
           UPSTREAM_REPO: remnawave/panel
           UPSTREAM_SYNC_REPORT_PATH: ${{ runner.temp }}/upstream-sync-report.md
         run: bash .github/scripts/upstream-sync-lib.sh resolve

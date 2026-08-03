@@ -94,9 +94,8 @@ test_panel_release_contract_uses_official_tag() {
 }
 
 test_checkout_and_readonly_resolver_use_fallback_token() {
-    file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN || github.token }}' &&
-        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || github.token }}' &&
-        file_contains "$WORKFLOW" 'github.token' &&
+    file_contains "$WORKFLOW" 'token: ${{ github.token }}' &&
+        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ github.token }}' &&
         ! file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN }}'
 }
 

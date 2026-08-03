@@ -25,7 +25,7 @@ jobs:
         with:
           ref: singbox
           fetch-depth: 0
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Resolve official latest stable release
         id: release
@@ -79,8 +79,8 @@ jobs:
       - name: Verify write capabilities before push
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -106,7 +106,7 @@ jobs:
       - name: Push tested merge
         if: steps.sync.outcome == 'success'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}
         run: |
@@ -132,7 +132,7 @@ jobs:
       - name: Sync official fork Release
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           FORK_REPO: ${{ github.repository }}
           FORK_COMMIT: ${{ steps.source.outputs.sha }}
           UPSTREAM_REPO: remnawave/panel

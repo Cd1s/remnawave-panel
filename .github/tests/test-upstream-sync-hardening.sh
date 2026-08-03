@@ -130,17 +130,19 @@ test_panel_release_contract_uses_official_tag() {
 }
 
 test_checkout_and_readonly_resolver_use_fallback_token() {
-    file_contains "$WORKFLOW" 'token: ${{ github.token }}' &&
+    file_contains "$WORKFLOW" 'token: ${{ secrets.GITHUB_TOKEN }}' &&
+        ! file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN }}' &&
         file_contains "$WORKFLOW" 'GH_TOKEN: ${{ github.token }}' &&
+        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' &&
         file_contains "$WORKFLOW" 'WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}'
 }
 
 test_push_uses_ephemeral_workflow_auth() {
     file_contains "$WORKFLOW" 'GIT_CONFIG_KEY_0=http.https://github.com/.extraheader' &&
     file_contains "$WORKFLOW" 'GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header"' &&
-        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ github.token }}' &&
+        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' &&
         file_contains "$WORKFLOW" 'WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' &&
-        file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' &&
+        file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}' &&
         file_contains "$WORKFLOW" 'WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}' &&
         file_contains "$WORKFLOW" 'push_token="$GITHUB_TOKEN"' &&
         file_contains "$WORKFLOW" 'push_token="$WORKFLOW_TOKEN"' &&
@@ -150,7 +152,7 @@ test_push_uses_ephemeral_workflow_auth() {
 }
 
 test_push_auth_never_duplicates_checkout_extraheader() {
-    file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' || return 1
+    file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}' || return 1
     file_contains "$WORKFLOW" 'WORKFLOW_CHANGED:' || return 1
     file_contains "$WORKFLOW" 'push_token=' || return 1
     [ "$(grep -Fc 'git config --unset-all http.https://github.com/.extraheader || true' "$WORKFLOW")" -eq 2 ] || return 1
@@ -169,7 +171,7 @@ if [ "${1:-}" = api ]; then
     case "${2:-}" in
         repos/Cd1s/test) printf '{"id":123}\n' ;;
         repos/Cd1s/test/releases?per_page=1) printf '[]\n' ;;
-        user/packages*|repos/Cd1s/test/actions/workflows) exit 97 ;;
+        forbidden/packages*|repos/Cd1s/test/actions/workflows) exit 97 ;;
         *) exit 2 ;;
     esac
     exit 0
@@ -180,7 +182,7 @@ EOF
     result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GH_CALL_LOG="$call_log" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token GITHUB_RUN_ID=panel bash "$LIB" preflight 2>&1)" || return 1
     contains "$result" 'capability_preflight=passed' || return 1
     grep -Fq 'repos/Cd1s/test' "$call_log" || return 1
-    ! grep -Fq 'actions/workflows' "$call_log" && ! grep -Fq 'user/packages' "$call_log"
+    ! grep -Fq 'actions/workflows' "$call_log" && ! grep -Fq 'forbidden/packages' "$call_log"
 }
 
 test_capability_preflight_rejects_forbidden_probes() {
@@ -204,7 +206,7 @@ EOF
     chmod +x "$mock_bin/gh"
     result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GH_CALL_LOG="$call_log" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token GITHUB_RUN_ID=panel bash "$LIB" preflight 2>&1)" || return 1
     contains "$result" 'capability_preflight=passed' || return 1
-    ! grep -Fq 'actions/workflows' "$call_log" && ! grep -Fq 'user/packages' "$call_log"
+    ! grep -Fq 'actions/workflows' "$call_log" && ! grep -Fq 'forbidden/packages' "$call_log"
 }
 
 test_workflow_diff_without_token_fails_closed() {
@@ -224,7 +226,7 @@ if [ "${1:-}" = api ]; then
     case "${2:-}" in
         repos/Cd1s/test) [ "${3:-}" = --jq ] && printf '123\n' || printf '{"id":123}\n' ;;
         repos/Cd1s/test/releases?per_page=1) printf '[]\n' ;;
-        user/packages*|repos/Cd1s/test/actions/workflows) exit 97 ;;
+        forbidden/packages*|repos/Cd1s/test/actions/workflows) exit 97 ;;
         *) exit 2 ;;
     esac
     exit 0

@@ -93,16 +93,17 @@ test_panel_release_contract_uses_official_tag() {
         file_contains "$WORKFLOW" 'official_panel_release_tag=${{ steps.release.outputs.tag }}'
 }
 
-test_checkout_and_readonly_resolver_use_workflow_token() {
-    file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN }}' &&
-        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' &&
-        ! file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}'
+test_checkout_and_readonly_resolver_use_fallback_token() {
+    file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN || github.token }}' &&
+        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || github.token }}' &&
+        file_contains "$WORKFLOW" 'github.token' &&
+        ! file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN }}'
 }
 
 run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
 run_case test_resolver; run_case test_empty_and_network_errors_classified; run_case test_merge_and_abort_contract; run_case test_current_release_contract_does_not_require_package_json; run_case test_workflow_contract
 run_case test_upstream_tag_fetch_is_namespaced
 run_case test_panel_release_contract_uses_official_tag
-run_case test_checkout_and_readonly_resolver_use_workflow_token
+run_case test_checkout_and_readonly_resolver_use_fallback_token
 [ "$failures" -eq 0 ] || exit 1
 printf 'all upstream hardening tests passed\n'

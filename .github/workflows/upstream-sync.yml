@@ -12,6 +12,7 @@ permissions:
 # `workflows` is a GitHub App/PAT repository permission, not an Actions `permissions` key.
 # WORKFLOW_TOKEN must grant contents:write + workflows:write; release access is preflighted
 # before any write or published artifact.
+# workflow_token_query_error is fail-closed and uploaded with the sync report.
 
 concurrency:
   group: upstream-sync-panel
@@ -79,8 +80,8 @@ jobs:
       - name: Verify write capabilities before push
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -106,7 +107,7 @@ jobs:
       - name: Push tested merge
         if: steps.sync.outcome == 'success'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
           WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}
         run: |
@@ -132,7 +133,9 @@ jobs:
       - name: Sync official fork Release
         if: steps.sync.outcome == 'success'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}
           FORK_REPO: ${{ github.repository }}
           FORK_COMMIT: ${{ steps.source.outputs.sha }}
           UPSTREAM_REPO: remnawave/panel
@@ -140,7 +143,14 @@ jobs:
           UPSTREAM_RELEASE_URL: ${{ steps.release.outputs.url }}
           UPSTREAM_RELEASE_VERSION: ${{ steps.release.outputs.version }}
           CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: bash .github/scripts/sync-release.sh sync
+        run: |
+          set -euo pipefail
+          release_token="$GH_TOKEN"
+          if [ "$WORKFLOW_CHANGED" = true ]; then
+            test -n "$WORKFLOW_TOKEN" || { echo 'upstream_sync=failed reason=missing_WORKFLOW_TOKEN workflow_files_changed' >&2; exit 1; }
+            release_token="$WORKFLOW_TOKEN"
+          fi
+          GH_TOKEN="$release_token" bash .github/scripts/sync-release.sh sync
       - name: Upload auditable upstream failure report
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4

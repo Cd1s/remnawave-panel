@@ -129,20 +129,22 @@ test_panel_release_contract_uses_official_tag() {
         file_contains "$WORKFLOW" 'official_panel_release_tag=${{ steps.release.outputs.tag }}'
 }
 
-test_checkout_and_readonly_resolver_use_fallback_token() {
+test_checkout_and_readonly_resolver_use_builtin_token() {
     file_contains "$WORKFLOW" 'token: ${{ secrets.GITHUB_TOKEN }}' &&
         ! file_contains "$WORKFLOW" 'token: ${{ secrets.WORKFLOW_TOKEN }}' &&
         file_contains "$WORKFLOW" 'GH_TOKEN: ${{ github.token }}' &&
-        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}' &&
+        ! file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}' &&
+        file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' &&
+        file_contains "$WORKFLOW" 'workflow_token_query_error' &&
         file_contains "$WORKFLOW" 'WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}'
 }
 
 test_push_uses_ephemeral_workflow_auth() {
     file_contains "$WORKFLOW" 'GIT_CONFIG_KEY_0=http.https://github.com/.extraheader' &&
     file_contains "$WORKFLOW" 'GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header"' &&
-        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}' &&
+        ! file_contains "$WORKFLOW" 'GH_TOKEN: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}' &&
         file_contains "$WORKFLOW" 'WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}' &&
-        file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}' &&
+        file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' &&
         file_contains "$WORKFLOW" 'WORKFLOW_CHANGED: ${{ steps.sync.outputs.workflow_changed }}' &&
         file_contains "$WORKFLOW" 'push_token="$GITHUB_TOKEN"' &&
         file_contains "$WORKFLOW" 'push_token="$WORKFLOW_TOKEN"' &&
@@ -152,7 +154,7 @@ test_push_uses_ephemeral_workflow_auth() {
 }
 
 test_push_auth_never_duplicates_checkout_extraheader() {
-    file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}' || return 1
+    file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' || return 1
     file_contains "$WORKFLOW" 'WORKFLOW_CHANGED:' || return 1
     file_contains "$WORKFLOW" 'push_token=' || return 1
     [ "$(grep -Fc 'git config --unset-all http.https://github.com/.extraheader || true' "$WORKFLOW")" -eq 2 ] || return 1
@@ -215,6 +217,20 @@ test_workflow_diff_without_token_fails_closed() {
     contains "$result" 'reason=missing_WORKFLOW_TOKEN workflow_files_changed'
 }
 
+test_workflow_diff_with_invalid_token_fails_closed() {
+    make_repo
+    cat >"$mock_bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+[ "${1:-}" = api ] || exit 2
+[ "${2:-}" = user ] && exit 1
+printf '{"id":123}\n'
+EOF
+    chmod +x "$mock_bin/gh"
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token WORKFLOW_CHANGED=true WORKFLOW_TOKEN=bad-token bash "$LIB" preflight 2>&1)" && return 1
+    contains "$result" 'reason=workflow_token_query_error'
+}
+
 test_capability_preflight_rejects_missing_workflow_token_v2() {
     make_repo
     call_log="$fixture_root/gh.log"
@@ -261,10 +277,11 @@ run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
 run_case test_resolver; run_case test_empty_and_network_errors_classified; run_case test_historical_tag_collision_fetch_is_safe; run_case test_merge_and_abort_contract; run_case test_current_release_contract_does_not_require_package_json; run_case test_workflow_contract
 run_case test_upstream_main_fetch_does_not_import_tags
 run_case test_panel_release_contract_uses_official_tag
-run_case test_checkout_and_readonly_resolver_use_fallback_token
+run_case test_checkout_and_readonly_resolver_use_builtin_token
 run_case test_push_uses_ephemeral_workflow_auth
 run_case test_push_auth_never_duplicates_checkout_extraheader
 run_case test_capability_preflight_rejects_forbidden_probes
 run_case test_workflow_diff_without_token_fails_closed
+run_case test_workflow_diff_with_invalid_token_fails_closed
 [ "$failures" -eq 0 ] || exit 1
 printf 'all upstream hardening tests passed\n'

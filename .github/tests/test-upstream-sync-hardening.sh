@@ -96,14 +96,78 @@ test_panel_release_contract_uses_official_tag() {
 test_checkout_and_readonly_resolver_use_fallback_token() {
     file_contains "$WORKFLOW" 'token: ${{ github.token }}' &&
         file_contains "$WORKFLOW" 'GH_TOKEN: ${{ github.token }}' &&
-        file_contains "$WORKFLOW" 'GH_TOKEN: ${{ github.token }}' &&
         file_contains "$WORKFLOW" 'WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}'
 }
 
 test_push_uses_ephemeral_workflow_auth() {
     file_contains "$WORKFLOW" 'GIT_CONFIG_KEY_0=http.https://github.com/.extraheader' &&
-        file_contains "$WORKFLOW" 'GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header"' &&
+    file_contains "$WORKFLOW" 'GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header"' &&
+        ! file_contains "$WORKFLOW" 'WORKFLOW_CHANGED:' &&
+        ! file_contains "$WORKFLOW" 'GITHUB_TOKEN: ${{ github.token }}' &&
         ! file_contains "$WORKFLOW" 'Configure ephemeral GitHub auth for push'
+}
+
+test_capability_preflight_contract() {
+    make_repo
+    call_log="$fixture_root/gh.log"
+    cat >"$mock_bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+printf '%s\n' "$*" >>"$GH_CALL_LOG"
+if [ "${1:-}" = api ]; then
+    case "${2:-}" in
+        repos/Cd1s/test) printf '{"permissions":{"push":true}}\n' ;;
+        repos/Cd1s/test/releases?per_page=1) printf '[]\n' ;;
+        user/packages*|repos/Cd1s/test/actions/workflows) printf '{}\n' ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+exit 2
+EOF
+    chmod +x "$mock_bin/gh"
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GH_CALL_LOG="$call_log" GITHUB_REPOSITORY=Cd1s/test WORKFLOW_TOKEN=workflow-token PACKAGE_TOKEN=package-token GH_TOKEN=workflow-token SKIP_GIT_DRY_RUN=true GITHUB_RUN_ID=panel bash "$LIB" preflight 2>&1)" || return 1
+    contains "$result" 'capability_preflight=passed' || return 1
+    grep -Fq 'repos/Cd1s/test' "$call_log" || return 1
+    grep -Fq 'actions/workflows' "$call_log" || return 1
+    grep -Fq 'user/packages' "$call_log"
+}
+
+test_workflow_diff_without_token_fails_closed() {
+    make_repo
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GITHUB_REPOSITORY=Cd1s/test WORKFLOW_TOKEN= bash "$LIB" preflight 2>&1)" && return 1
+    contains "$result" 'reason=missing_WORKFLOW_TOKEN requires_contents_workflows_packages_release_write'
+}
+
+test_capability_preflight_accepts_github_token_without_permissions_v2() {
+    make_repo
+    call_log="$fixture_root/gh.log"
+    cat >"$mock_bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+printf '%s\n' "$*" >>"$GH_CALL_LOG"
+if [ "${1:-}" = api ]; then
+    case "${2:-}" in
+        repos/Cd1s/test) [ "${3:-}" = --jq ] && printf '123\n' || printf '{"id":123}\n' ;;
+        repos/Cd1s/test/releases?per_page=1) printf '[]\n' ;;
+        user/packages*|repos/Cd1s/test/actions/workflows) exit 97 ;;
+        *) exit 2 ;;
+    esac
+    exit 0
+fi
+exit 2
+EOF
+    chmod +x "$mock_bin/gh"
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GH_CALL_LOG="$call_log" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token GITHUB_RUN_ID=panel-v2 bash "$LIB" preflight 2>&1)" || return 1
+    contains "$result" 'capability_preflight=passed' || return 1
+    grep -Fq 'repos/Cd1s/test --jq .id' "$call_log" || return 1
+    ! grep -Eq 'user/packages|actions/workflows' "$call_log"
+}
+
+test_workflow_diff_without_token_fails_closed_v2() {
+    make_repo
+    result="$(cd "$repo"; PATH="$mock_bin:$PATH" GIT_BIN="$mock_bin/git" REAL_GIT="$real_git" GITHUB_REPOSITORY=Cd1s/test GH_TOKEN=github-token WORKFLOW_CHANGED=true WORKFLOW_TOKEN= bash "$LIB" preflight 2>&1)" && return 1
+    contains "$result" 'reason=missing_WORKFLOW_TOKEN workflow_files_changed'
 }
 
 run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
@@ -112,5 +176,7 @@ run_case test_upstream_tag_fetch_is_namespaced
 run_case test_panel_release_contract_uses_official_tag
 run_case test_checkout_and_readonly_resolver_use_fallback_token
 run_case test_push_uses_ephemeral_workflow_auth
+run_case test_capability_preflight_accepts_github_token_without_permissions_v2
+run_case test_workflow_diff_without_token_fails_closed_v2
 [ "$failures" -eq 0 ] || exit 1
 printf 'all upstream hardening tests passed\n'

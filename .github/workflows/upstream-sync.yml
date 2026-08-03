@@ -83,11 +83,12 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$WORKFLOW_TOKEN"
-          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          auth_header="$(printf 'x-access-token:%s' "$WORKFLOW_TOKEN" | base64 | tr -d '\n')"
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
           bash .github/scripts/upstream-sync-lib.sh preflight
+
       - name: Configure ephemeral GitHub auth for push
         if: steps.sync.outcome == 'success'
         env:
@@ -99,6 +100,7 @@ jobs:
             echo 'GIT_CONFIG_KEY_0=http.https://github.com/.extraheader'
             echo "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $token"
           } >> "$GITHUB_ENV"
+
       - name: Resolve final fork commit
         id: source
         if: steps.sync.outcome == 'success'

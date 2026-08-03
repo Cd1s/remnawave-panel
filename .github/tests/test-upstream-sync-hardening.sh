@@ -69,7 +69,12 @@ test_workflow_contract() {
     file_contains "$WORKFLOW" 'git push origin HEAD:singbox'
 }
 
+test_upstream_tag_fetch_is_namespaced() {
+    file_contains "$WORKFLOW" 'refs/tags/${{ steps.release.outputs.tag }}:refs/tags/upstream-release-${{ steps.release.outputs.tag }}'
+}
+
 run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
 run_case test_resolver; run_case test_empty_and_network_errors_classified; run_case test_merge_and_abort_contract; run_case test_workflow_contract
+run_case test_upstream_tag_fetch_is_namespaced
 [ "$failures" -eq 0 ] || exit 1
 printf 'all upstream hardening tests passed\n'

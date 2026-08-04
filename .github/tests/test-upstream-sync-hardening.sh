@@ -123,6 +123,14 @@ test_upstream_main_fetch_does_not_import_tags() {
         ! file_contains "$WORKFLOW" 'refs/tags/${{ steps.release.outputs.tag }}:refs/tags/upstream-release-${{ steps.release.outputs.tag }}'
 }
 
+test_workflow_fetches_resolved_release_before_merge() {
+    main_fetch_line="$(grep -n -m1 'git fetch --no-tags upstream main' "$WORKFLOW" | cut -d: -f1)"
+    ref_fetch_line="$(grep -n -m1 'git fetch --no-tags upstream "${UPSTREAM_REF}"' "$WORKFLOW" | cut -d: -f1)"
+    merge_line="$(grep -n -m1 'upstream-sync-lib.sh merge' "$WORKFLOW" | cut -d: -f1)"
+    [ -n "$main_fetch_line" ] && [ -n "$ref_fetch_line" ] && [ "$ref_fetch_line" -lt "$merge_line" ] &&
+        ! grep -Eq 'git fetch ([^[:space:]]+ )*--tags([[:space:]]|$)' "$WORKFLOW"
+}
+
 test_panel_release_contract_uses_official_tag() {
     ! file_contains "$WORKFLOW" 'bash .github/scripts/upstream-sync-lib.sh package' &&
         file_contains "$WORKFLOW" 'bash .github/scripts/upstream-sync-lib.sh release-file' &&
@@ -276,6 +284,7 @@ EOF
 run_case() { if "$1"; then pass "$1"; else fail "$1"; fi; }
 run_case test_resolver; run_case test_empty_and_network_errors_classified; run_case test_historical_tag_collision_fetch_is_safe; run_case test_merge_and_abort_contract; run_case test_current_release_contract_does_not_require_package_json; run_case test_workflow_contract
 run_case test_upstream_main_fetch_does_not_import_tags
+run_case test_workflow_fetches_resolved_release_before_merge
 run_case test_panel_release_contract_uses_official_tag
 run_case test_checkout_and_readonly_resolver_use_builtin_token
 run_case test_push_uses_ephemeral_workflow_auth

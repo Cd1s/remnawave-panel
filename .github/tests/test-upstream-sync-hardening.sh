@@ -113,7 +113,7 @@ test_current_release_contract_does_not_require_package_json() {
 }
 
 test_workflow_contract() {
-    file_contains "$WORKFLOW" '*/5 * * * *' || return 1; [ -z "$(awk '/^jobs:/{exit} /\$\{\{ runner\.temp \}\}/{print NR}' "$WORKFLOW")" ] || return 1; file_contains "$WORKFLOW" 'workflow_dispatch:' || return 1; file_contains "$WORKFLOW" 'cancel-in-progress: false' || return 1; file_contains "$WORKFLOW" 'WORKFLOW_TOKEN' || return 1; file_contains "$WORKFLOW" 'upstream-sync-lib.sh preflight' || return 1; file_contains "$WORKFLOW" 'actions/upload-artifact@v4' || return 1
+    ! file_contains "$WORKFLOW" 'schedule:' || return 1; ! file_contains "$WORKFLOW" '*/5 * * * *' || return 1; [ -z "$(awk '/^jobs:/{exit} /\$\{\{ runner\.temp \}\}/{print NR}' "$WORKFLOW")" ] || return 1; file_contains "$WORKFLOW" 'workflow_dispatch:' || return 1; file_contains "$WORKFLOW" 'cancel-in-progress: false' || return 1; file_contains "$WORKFLOW" 'WORKFLOW_TOKEN' || return 1; file_contains "$WORKFLOW" 'upstream-sync-lib.sh preflight' || return 1; file_contains "$WORKFLOW" 'actions/upload-artifact@v4' || return 1
     preflight_line="$(grep -n -m1 'upstream-sync-lib.sh preflight' "$WORKFLOW" | cut -d: -f1)"; push_line="$(grep -n -m1 'git push origin HEAD:singbox' "$WORKFLOW" | cut -d: -f1)"; [ -n "$preflight_line" ] && [ -n "$push_line" ] && [ "$preflight_line" -lt "$push_line" ] || return 1
     file_contains "$WORKFLOW" 'git push origin HEAD:singbox'
 }

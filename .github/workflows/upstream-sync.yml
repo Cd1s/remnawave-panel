@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
   actions: read
 
 # `workflows` is a GitHub App/PAT repository permission, not an Actions `permissions` key.
@@ -160,3 +161,19 @@ jobs:
           name: upstream-sync-report-${{ github.run_id }}
           path: ${{ runner.temp }}/upstream-sync-report.md
           if-no-files-found: warn
+
+      - name: Open issue for Hub repair agent
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ runner.temp }}/upstream-sync-report.md
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh label create upstream-sync-failed --color B60205 --description "Upstream sync failed; Paseo Hub repair agent" 2>/dev/null || true
+          if gh issue list --label upstream-sync-failed --state open --json number --jq 'length' | grep -qv '^0$'; then
+            gh issue comment "$(gh issue list --label upstream-sync-failed --state open --json number --jq '.[0].number')" --body "Another failed run: $RUN_URL"
+            exit 0
+          fi
+          { echo "Upstream sync failed: $RUN_URL"; echo; [ -f "$REPORT" ] && cat "$REPORT" || echo "(no sync report produced)"; } > /tmp/issue.md
+          gh issue create --title "Upstream sync failed (run ${{ github.run_id }})" --body-file /tmp/issue.md --label upstream-sync-failed

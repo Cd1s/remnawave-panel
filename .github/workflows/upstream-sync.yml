@@ -1,7 +1,7 @@
 name: Sync upstream
 
-# Scheduled dispatch is intentionally external: /root/.hermes/scripts/remnawave_release_dispatch.py
-# calls this workflow only after the official stable Release tag differs from this fork's Release.
+# Dispatched by .github/workflows/detect-upstream-release.yml (every 30 min) only after the official stable
+# Release tag differs from this fork's Release (previously an external clawbot-104 timer did this).
 # That prevents no-op GitHub Actions runs and their failure/cancellation notifications.
 on:
   workflow_dispatch:

@@ -1,0 +1,70 @@
+name: Detect upstream release
+
+# Free hourly-style detector (replaces the external clawbot-104 timer). It only compares the official stable
+# Release with this fork's Release; when they differ it dispatches "Sync upstream" (the full sync/validate/
+# publish workflow, unchanged). Equal => the job ends in seconds and nothing else runs.
+on:
+  schedule:
+    - cron: '2,32 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: detect-upstream-release
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare official and fork Release, dispatch sync when different
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: remnawave/panel
+          FORK_REPO: ${{ github.repository }}
+        run: |
+          #!/usr/bin/env bash
+          # Dispatch "Sync upstream" only when the official stable Release differs from this fork's Release,
+          # and only once per (fork HEAD, release): a failed attempt is retried only after the fork HEAD changes
+          # (the usual repair) or a newer official Release is published. Replaces the external clawbot-104 timer.
+          # Env: UPSTREAM_REPO (e.g. remnawave/backend), FORK_REPO (e.g. Cd1s/remnawave-backend), DRY_RUN=1 to only print.
+          set -euo pipefail
+          : "${UPSTREAM_REPO:?}" "${FORK_REPO:?}"
+          WORKFLOW="Sync upstream"
+
+          release_json=$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=100")
+          official=$(jq -c '[.[] | select(.draft == false and .prerelease == false) | select((.tag_name // "") != "")] | sort_by(.published_at) | last // empty' <<<"$release_json")
+          [ -n "$official" ] || { echo "no stable release for ${UPSTREAM_REPO}" >&2; exit 1; }
+          official_tag=$(jq -r .tag_name <<<"$official")
+          published=$(jq -r '.published_at // ""' <<<"$official")
+
+          fork_err=$(mktemp)
+          if fork_tag=$(gh release view --repo "$FORK_REPO" --json tagName --jq .tagName 2>"$fork_err"); then :; else
+            if grep -qi "release not found" "$fork_err"; then fork_tag=""; else cat "$fork_err" >&2; exit 1; fi
+          fi
+
+          if [ "$official_tag" = "$fork_tag" ]; then
+            echo "up_to_date official=$official_tag fork=$fork_tag"
+            echo "action=none" >> "${GITHUB_OUTPUT:-/dev/null}"
+            exit 0
+          fi
+
+          head=$(gh api "repos/${FORK_REPO}/commits/singbox" --jq .sha)
+          latest=$(gh run list --repo "$FORK_REPO" --workflow "$WORKFLOW" --branch singbox --limit 1 --json headSha,createdAt,status --jq '.[0] // empty')
+          if [ -n "$latest" ]; then
+            l_head=$(jq -r .headSha <<<"$latest"); l_created=$(jq -r .createdAt <<<"$latest"); l_status=$(jq -r .status <<<"$latest")
+            if [ "$l_status" != completed ]; then
+              echo "attempt_in_progress official=$official_tag fork=$fork_tag status=$l_status"; echo "action=none" >> "${GITHUB_OUTPUT:-/dev/null}"; exit 0
+            fi
+            if [ "$l_head" = "$head" ] && [[ "$l_created" > "$published" || "$l_created" = "$published" ]]; then
+              echo "already_attempted official=$official_tag fork=${fork_tag:-none} head=${head:0:12} (waits for a fork HEAD change or a newer official release)"
+              echo "action=none" >> "${GITHUB_OUTPUT:-/dev/null}"; exit 0
+            fi
+          fi
+
+          echo "dispatch official=$official_tag fork=${fork_tag:-none} head=${head:0:12}"
+          { echo "action=dispatch"; echo "official=$official_tag"; echo "fork=${fork_tag:-none}"; } >> "${GITHUB_OUTPUT:-/dev/null}"
+          [ "${DRY_RUN:-}" = 1 ] || gh workflow run "$WORKFLOW" --repo "$FORK_REPO" --ref singbox

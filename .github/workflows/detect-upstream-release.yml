@@ -5,7 +5,7 @@ name: Detect upstream release
 # publish workflow, unchanged). Equal => the job ends in seconds and nothing else runs.
 on:
   schedule:
-    - cron: '2,32 * * * *'
+    - cron: '23,53 * * * *'
   workflow_dispatch:
 
 permissions:

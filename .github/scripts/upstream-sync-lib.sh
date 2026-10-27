@@ -3,9 +3,22 @@ set -euo pipefail
 
 git_bin="${GIT_BIN:-git}"; git_cmd() { "$git_bin" "$@"; }; fail_reason() { if [ -n "${UPSTREAM_SYNC_REPORT_PATH:-}" ]; then mkdir -p "$(dirname "$UPSTREAM_SYNC_REPORT_PATH")"; { echo '# Upstream synchronization failed'; echo; echo "- maintained SHA: \`$(git_cmd rev-parse HEAD 2>/dev/null || echo unknown)\`"; echo "- reason: \`$*\`"; } >"$UPSTREAM_SYNC_REPORT_PATH"; fi; echo "upstream_sync=failed reason=$*" >&2; exit 1; }
 gh_with_sync_token() { if [ "${WORKFLOW_CHANGED:-false}" = true ]; then GH_TOKEN="${WORKFLOW_TOKEN:?WORKFLOW_TOKEN is required for workflow changes}" gh "$@"; else gh "$@"; fi; }
+# The paginated releases list intermittently returns []; retry before treating it as "no stable release".
+releases_with_retry() {
+    local out="" attempt
+    for attempt in 1 2 3; do
+        if out="$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=100")" && [ "$out" != "[]" ]; then
+            printf '%s\n' "$out"
+            return 0
+        fi
+        [ "$attempt" = 3 ] || sleep 10
+    done
+    [ -n "$out" ] && printf '%s\n' "$out"
+}
+
 resolve_release() {
     : "${UPSTREAM_REPO:?UPSTREAM_REPO is required}"; : "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"; error_file="$(mktemp)"
-    if ! releases="$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=100" 2>"$error_file")"; then cat "$error_file" >&2; fail_reason release_query_error repo="$UPSTREAM_REPO"; fi
+    if ! releases="$(releases_with_retry 2>"$error_file")"; then cat "$error_file" >&2; fail_reason release_query_error repo="$UPSTREAM_REPO"; fi
     selected="$(jq -c '[.[] | select(.draft == false and .prerelease == false) | select(.tag_name != null and .tag_name != "")] | sort_by(.published_at) | last // empty' <<<"$releases")" || fail_reason release_response_malformed repo="$UPSTREAM_REPO"
     [ -n "$selected" ] && [ "$selected" != null ] || fail_reason no_stable_release repo="$UPSTREAM_REPO"
     tag="$(jq -r '.tag_name' <<<"$selected")"; version="${tag#v}"; url="$(jq -r '.html_url // .url // empty' <<<"$selected")"; published="$(jq -r '.published_at // empty' <<<"$selected")"; [ -n "$tag" ] || fail_reason latest_release_tag_missing repo="$UPSTREAM_REPO"

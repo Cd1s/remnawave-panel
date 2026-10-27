@@ -166,11 +166,13 @@ jobs:
         if: ${{ failure() }}
         env:
           GH_TOKEN: ${{ github.token }}
+          # The job adds an `upstream` remote; without GH_REPO gh would target remnawave/* instead of this fork.
+          GH_REPO: ${{ github.repository }}
           REPORT: ${{ runner.temp }}/upstream-sync-report.md
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          gh label create upstream-sync-failed --color B60205 --description "Upstream sync failed; Paseo Hub repair agent" 2>/dev/null || true
+          gh label create upstream-sync-failed --force --color B60205 --description "Upstream sync failed; Paseo Hub repair agent"
           if gh issue list --label upstream-sync-failed --state open --json number --jq 'length' | grep -qv '^0$'; then
             gh issue comment "$(gh issue list --label upstream-sync-failed --state open --json number --jq '.[0].number')" --body "Another failed run: $RUN_URL"
             exit 0

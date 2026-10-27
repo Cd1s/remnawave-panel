@@ -35,9 +35,14 @@ jobs:
           : "${UPSTREAM_REPO:?}" "${FORK_REPO:?}"
           WORKFLOW="Sync upstream"
 
-          release_json=$(gh api "repos/${UPSTREAM_REPO}/releases?per_page=100")
-          official=$(jq -c '[.[] | select(.draft == false and .prerelease == false) | select((.tag_name // "") != "")] | sort_by(.published_at) | last // empty' <<<"$release_json")
-          [ -n "$official" ] || { echo "no stable release for ${UPSTREAM_REPO}" >&2; exit 1; }
+          # releases?per_page=N intermittently returns [] (run 39806435584); releases/latest is the stable endpoint.
+          official=""
+          for attempt in 1 2 3; do
+            official=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq 'select(.draft == false and .prerelease == false and (.tag_name // "") != "") | {tag_name, published_at}' 2>/dev/null || true)
+            [ -n "$official" ] && break
+            [ "$attempt" = 3 ] || sleep 10
+          done
+          [ -n "$official" ] || { echo "no stable release for ${UPSTREAM_REPO} after 3 attempts" >&2; exit 1; }
           official_tag=$(jq -r .tag_name <<<"$official")
           published=$(jq -r '.published_at // ""' <<<"$official")
 
